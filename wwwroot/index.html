@@ -1,0 +1,112 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+    
+</head>
+<body>
+    <div id="log" />
+</body>
+</html>
+
+<script type="text/javascript" src="lib/@microsoft/signalr/dist/browser/signalr.js"></script>
+
+<script>
+
+    function createLog() {
+        var log = document.getElementById('log');
+        var ul = document.createElement('ul');
+
+        ul.id = 'log';
+        log.appendChild(ul);
+    }
+
+    function appendLog(entry) {
+        var listId = document.getElementById('log');
+
+        if (listId.children.length > 40) {
+            listId.removeChild(listId.children[1]);
+        }
+
+        var child = document.createElement('li');
+        child.innerText = entry;
+        listId.appendChild(child);
+    }
+
+    function get(url) {
+        return new Promise((resolve, reject) => {
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', url, true);
+            xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+            xhr.setRequestHeader('ABC', 'mysecretpassword');
+            xhr.send();
+            xhr.onload = () => {
+                if (xhr.status >= 200 && xhr.status < 300) {
+                    resolve(xhr.response || xhr.responseText);
+                }
+                else {
+                    reject(new Error(xhr.statusText));
+                }
+            };
+
+            xhr.onerror = () => {
+                reject(new Error(xhr.statusText));
+            }
+        });
+    }
+
+    var _token = '';
+
+    function createConnection() {
+        
+        var options = {
+            accessTokenFactory: function () { return _token; }
+        };
+
+        connection = new signalR.HubConnectionBuilder()
+            .withUrl("/broadcast", options)
+            .configureLogging(signalR.LogLevel.Information)
+            .build();
+
+        connection.on('SendMessage', function (message) {
+            appendLog('Message from server: ' + message);
+            appendLog('');
+        });
+
+        return connection;
+    }
+
+    async function runConnection(transportType) {
+
+        var connection = createConnection(transportType);
+
+        try {
+
+            appendLog('connection without token created');
+            await connection.start()
+
+            appendLog('requesting token');
+            await connection.invoke('generateToken', 'User1', 'SecretPassword').then(token => _token = token)
+            await connection.stop()
+
+            connection = createConnection(transportType);
+            appendLog('connection with token created');
+
+            await connection.start()
+
+            appendLog('');
+
+            setTimeout(function sendMessage() {
+                var message = 'Hello at ' + new Date().toLocaleString();
+                appendLog('Message to server: ' + message);
+                connection.send('broadcast', message);
+                var timeout = 2000 + Math.random() * 4000;
+                setTimeout(sendMessage, timeout);
+            })
+
+        } catch (e) {
+            appendLog('Could not start connection, error: ' + e);
+        }
+    }
+
+    runConnection();
+</script>
